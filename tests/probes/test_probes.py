@@ -209,3 +209,55 @@ def test_mint_attempt_with_run_system_prompt(prompt):
     assert attempt.prompt.last_message("system").text == expected_system_prompt
     system_message = [turn for turn in attempt.prompt.turns if turn.role == "system"]
     assert len(system_message) == 1
+
+
+def _make_tree_search_probe_class(strategy):
+    import garak.probes.base
+
+    class _StrategyProbe(garak.probes.base.TreeSearchProbe):
+        DEFAULT_PARAMS = garak.probes.base.TreeSearchProbe.DEFAULT_PARAMS | {
+            "strategy": strategy
+        }
+        lang = "en"
+        goal = "test tree search strategy validation"
+        primary_detector = "always.Passthru"
+
+        def _get_initial_nodes(self):
+            return ["root"]
+
+        def _get_node_id(self, node):
+            return node
+
+        def _get_node_children(self, node):
+            return []
+
+        def _get_node_terms(self, node):
+            return [node]
+
+        def _gen_prompts(self, term):
+            return [term]
+
+        def _get_node_parent(self, node):
+            return None
+
+        def _get_node_siblings(self, node):
+            return []
+
+    return _StrategyProbe
+
+
+def test_tree_search_probe_rejects_invalid_strategy():
+    """TreeSearchProbe.__init__ validated strategy against a bare string
+    `("breadth_first, depth_first")` instead of a tuple, so `in` did substring
+    matching -- any substring of that string (e.g. "breadth") slipped past the
+    check instead of raising ValueError.
+
+    (The substring loophole also meant an invalid-but-matching strategy that
+    reached probe() would fail to match either branch of the strategy
+    dispatch there, leaving `current_node` unset and raising
+    UnboundLocalError -- confirmed via manual repro; not asserted here since
+    a correct __init__ now rejects the value before probe() is ever called.)
+    """
+    probe_cls = _make_tree_search_probe_class("breadth")
+    with pytest.raises(ValueError):
+        probe_cls()

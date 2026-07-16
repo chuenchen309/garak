@@ -439,9 +439,9 @@ class Probe(Configurable):
                             [pre_translation_prompt]
                         )
                     }
-                elif isinstance(pre_translation_prompt, garak.attempt.Message):
+                elif isinstance(pre_translation_prompt, garak.attempt.Conversation):
                     for turn in pre_translation_prompt.turns:
-                        turn.context.lang = self.lang
+                        turn.content.lang = self.lang
                     notes = {"pre_translation_prompt": pre_translation_prompt}
 
             attempts_todo.append(self._mint_attempt(prompt, seq, notes, lang))
@@ -668,7 +668,7 @@ class TreeSearchProbe(Probe):
 
     def __init__(self, config_root=_config):
         super().__init__(config_root)
-        if self.strategy not in ("breadth_first, depth_first"):
+        if self.strategy not in ("breadth_first", "depth_first"):
             raise ValueError(f"Unsupported tree search strategy '{self.strategy}'")
 
         self.never_queue_nodes: Iterable[str] = set()

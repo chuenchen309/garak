@@ -7,7 +7,7 @@ import tempfile
 import os
 
 from garak import _config, _plugins
-from garak.attempt import Message, Attempt, Conversation
+from garak.attempt import Message, Attempt, Conversation, Turn
 from garak.exception import GarakException
 
 NON_PROMPT_PROBES = [
@@ -187,6 +187,52 @@ def test_base_postprocess_attempt_preserves_output_order(classname, mocker):
         "second",
         "third",
     ], "reverse_translation_outputs must stay aligned with the original output order"
+
+
+@pytest.mark.parametrize("classname", ["probes.base.Probe"])
+def test_conversation_prompt_pretranslation_provenance(classname, mocker):
+    """Conversation prompts undergoing translation should keep a
+    pre_translation_prompt provenance note, same as str/Message prompts do.
+
+    The branch meant to handle Conversation prompts duplicated the preceding
+    `isinstance(..., Message)` check instead of checking for Conversation, so
+    it was unreachable dead code and Conversation prompts silently lost their
+    provenance note.
+    """
+    import garak.langservice
+    import garak.probes.base
+    from garak.langproviders.local import Passthru
+
+    null_provider = Passthru(
+        {
+            "langproviders": {
+                "local": {
+                    "language": "en,ja",
+                    # Note: differing source/target forces the translation path
+                }
+            }
+        }
+    )
+
+    mocker.patch.object(
+        garak.langservice, "get_langprovider", return_value=null_provider
+    )
+
+    p = garak.probes.base.Probe()
+    p.lang = "en"
+    p.prompts = [Conversation([Turn("user", Message("original prompt", lang="en"))])]
+
+    generator_instance = _plugins.load_plugin("generators.test.Repeat")
+    attempts = p.probe(generator_instance)
+
+    assert len(attempts) == 1
+    notes = attempts[0].notes
+    assert "pre_translation_prompt" in notes, (
+        "Conversation prompts should retain pre_translation_prompt provenance, "
+        "like str/Message prompts do"
+    )
+    preserved = notes["pre_translation_prompt"]
+    assert preserved.turns[0].content.lang == "en"
 
 
 """
